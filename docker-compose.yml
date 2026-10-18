@@ -1,0 +1,26 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: flowstate
+      POSTGRES_USER: flowstate
+      POSTGRES_PASSWORD: flowstate
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowstate"]
+      interval: 5s
+      retries: 15
+    volumes:
+      - flowstate-db:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+  app:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://flowstate:flowstate@db:5432/flowstate
+      PORT: "3001"
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  flowstate-db:
