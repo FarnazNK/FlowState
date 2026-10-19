@@ -31,7 +31,7 @@ export const repo = {
    await client.query('COMMIT');return item;
   }catch(error){await client.query('ROLLBACK');throw error}finally{client.release()}
  },
- recordIntake: async (runId: string, result: Record<string, unknown>): Promise<Run | undefined> => {
+ recordIntake: async (runId: string, result: object): Promise<Run | undefined> => {
   const client = await pool.connect();
   try {
    await client.query('BEGIN');
