@@ -10,7 +10,7 @@ export const repo = {
  list: async () => (await pool.query<Workflow>('SELECT id,name,status,created_at FROM workflows ORDER BY created_at DESC,id DESC LIMIT 100')).rows,
  create: async (name: string): Promise<Workflow> => (await pool.query<Workflow>('INSERT INTO workflows(id,name) VALUES($1,$2) RETURNING id,name,status,created_at',[randomUUID(),name])).rows[0],
  get: async (id: string) => (await pool.query<Workflow>('SELECT id,name,status,created_at FROM workflows WHERE id=$1',[id])).rows[0],
- activate: async (id: string) => (await pool.query<Workflow>("UPDATE workflows SET status='active' WHERE id=$1 RETURNING *",[id])).rows[0],
+ activate: async (id: string) => (await pool.query<Workflow>("UPDATE workflows SET status='active' WHERE id=$1 RETURNING id,name,status,created_at",[id])).rows[0],
  runs: async (workflowId: string) => (await pool.query<Run>('SELECT id,workflow_id,state,created_at,updated_at FROM runs WHERE workflow_id=$1 ORDER BY created_at DESC,id DESC LIMIT 100',[workflowId])).rows,
  events: async (runId: string, before?: number) => (await pool.query<RunEvent>('SELECT id,run_id,event_type,payload,created_at FROM run_events WHERE run_id=$1 AND ($2::bigint IS NULL OR id<$2) ORDER BY id DESC LIMIT 50',[runId,before ?? null])).rows,
  createRun: async (workflowId: string): Promise<Run | undefined> => {
