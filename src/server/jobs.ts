@@ -3,12 +3,13 @@ import { pool } from './db.js';
 
 export type Job = {id:string;run_id:string;kind:'start_run';attempts:number;max_attempts:number;lease_token:string};
 export async function claimJob():Promise<Job|undefined>{
+ await pool.query(`UPDATE workflow_jobs SET status='failed', finished_at=now(), leased_until=NULL, lease_token=NULL, last_error='maximum attempts exhausted' WHERE status='running' AND leased_until<now() AND attempts>=max_attempts`);
  const token=randomUUID();
  const {rows}=await pool.query<Job>(`
  WITH candidate AS (
   SELECT id FROM workflow_jobs
-  WHERE (status='queued' AND available_at<=now())
-     OR (status='running' AND leased_until<now())
+  WHERE attempts<max_attempts AND ((status='queued' AND available_at<=now())
+     OR (status='running' AND leased_until<now()))
   ORDER BY available_at,created_at
   FOR UPDATE SKIP LOCKED LIMIT 1
  )
