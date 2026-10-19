@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { createTRPCClient, httpBatchLink } from '@trpc/client';
 import type { AppRouter } from '../server/router.js';
 import './style.css';
+import {DemoApp} from './DemoApp.js';
 
 let operatorToken='';
 const api = createTRPCClient<AppRouter>({ links: [httpBatchLink({
@@ -46,6 +47,7 @@ const Icon = ({ name, size=20 }: { name: string; size?: number }) => {
  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round">{paths[name]??paths.activity}</svg>;
 };
 function App() {
+ const [demoMode,setDemoMode]=useState(true);
  const [authorized,setAuthorized]=useState(false);
  const [enteredToken,setEnteredToken]=useState('');
  const [authError,setAuthError]=useState('');
@@ -141,6 +143,7 @@ function App() {
  const changeState=(next:RunState)=>{if(!run)return;const id=run.id, expected=run.state;void act(async()=>{await api.transition.mutate({runId:id,expected,next});await Promise.all([loadRuns(selectedId),api.events.query({runId:id}).then(items=>{setEvents(items);setMoreEvents(items.length===50)})])},'Execution moved to '+stateLabel[next].toLowerCase()+'.')};
  const loadMoreEvents=async()=>{if(eventsBusy||!runId||events.length===0)return;const selectedRun=runId;setEventsBusy(true);try{const page=await api.events.query({runId:selectedRun,before:Number(events[events.length-1].id)});if(selectedRun===runId){setEvents(old=>[...old,...page]);setMoreEvents(page.length===50)}}catch{setError('Could not load older events.')}finally{setEventsBusy(false)}};
  const sectionTitle=view==='overview'?'Operations overview':view==='workflows'?'Workflow explorer':'Execution activity';
+ if(demoMode)return <DemoApp onOperator={()=>setDemoMode(false)}/>;
  if(!authorized)return <div style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:24}}>
   <form style={{maxWidth:420,width:'100%',padding:32,border:'1px solid #64748b',borderRadius:16}} onSubmit={e=>{
    e.preventDefault();if(!enteredToken.trim()||authBusy)return;
@@ -151,7 +154,7 @@ function App() {
     operatorToken='';setAuthError('Invalid operator token or API unavailable.');
    }).finally(()=>setAuthBusy(false));
   }}>
-   <h1>FlowState operator access</h1>
+   <h1>FlowState operator access</h1><button type="button" className="button" onClick={()=>setDemoMode(true)}>Back to public demo</button>
    <p>This workspace requires the server-side operator token. Never enter a token on an untrusted site.</p>
    <label htmlFor="accessToken">Operator token</label>
    <input id="accessToken" type="password" autoComplete="off" required value={enteredToken}
