@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { Context, Layer } from 'effect';
 import { randomUUID } from 'node:crypto';
 const { Pool } = pg;
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
@@ -29,5 +30,25 @@ export const repo = {
    if(item)await client.query('INSERT INTO run_events(run_id,event_type,payload) VALUES($1,$2,$3)',[id,'run.transition',JSON.stringify({from:expected,to:next})]);
    await client.query('COMMIT');return item;
   }catch(error){await client.query('ROLLBACK');throw error}finally{client.release()}
+ },
+ recordIntake: async (runId: string, result: Record<string, unknown>): Promise<Run | undefined> => {
+  const client = await pool.connect();
+  try {
+   await client.query('BEGIN');
+   const run = (await client.query<Run>(
+    "UPDATE runs SET state='approval', updated_at=now() WHERE id=$1 AND state='running' RETURNING *",
+    [runId]
+   )).rows[0];
+   if (run) await client.query(
+    'INSERT INTO run_events(run_id,event_type,payload) VALUES($1,$2,$3::jsonb)',
+    [runId,'intake.extracted',JSON.stringify(result)]
+   );
+   await client.query('COMMIT');
+   return run;
+  } catch (error) { await client.query('ROLLBACK'); throw error }
+  finally { client.release() }
  }
 };
+export type WorkflowRepository = typeof repo;
+export class Repository extends Context.Tag('FlowState/Repository')<Repository, WorkflowRepository>() {}
+export const RepositoryLive = Layer.succeed(Repository, repo);
