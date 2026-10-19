@@ -14,7 +14,7 @@ export const allowed: Record<Run['state'],readonly Run['state'][]> = {
 export const canTransition=(from:Run['state'],to:Run['state'])=>allowed[from].includes(to);
 
 export const service = {
- list:()=>Effect.flatMap(Repository,r=>storage(()=>r.list())),
+ list:(input:{limit:number;cursor?:{createdAt:string;id:string};search?:string;status?:'draft'|'active'|'paused'})=>Effect.flatMap(Repository,r=>storage(()=>r.list(input))),
  create:(name:string)=>Effect.flatMap(Repository,r=>storage(()=>r.create(name))),
  activate:(id:string)=>Effect.gen(function*(){
   const r=yield* Repository;
@@ -22,7 +22,7 @@ export const service = {
   if(!item)return yield* Effect.fail(new NotFound({entity:'workflow'}));
   return item;
  }),
- runs:(id:string)=>Effect.flatMap(Repository,r=>storage(()=>r.runs(id))),
+ runs:(id:string,input:{limit:number;cursor?:{createdAt:string;id:string}})=>Effect.flatMap(Repository,r=>storage(()=>r.runs(id,input))),
  events:(id:string,before?:number)=>Effect.flatMap(Repository,r=>storage(()=>r.events(id,before))),
  start:(id:string)=>Effect.gen(function*(){
   const r=yield* Repository;
