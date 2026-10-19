@@ -15,3 +15,6 @@ CREATE TABLE IF NOT EXISTS run_events (
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS run_events_run_id_id_idx ON run_events(run_id, id);
+
+CREATE INDEX IF NOT EXISTS workflows_created_id_idx ON workflows(created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS runs_workflow_created_id_idx ON runs(workflow_id, created_at DESC, id DESC);
