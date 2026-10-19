@@ -1,10 +1,28 @@
+## Free all-in-one local setup (recommended)
+
+This Docker Compose configuration runs PostgreSQL, the Node API/SSE server, and the background worker on your computer. No external hosting or paid queue is necessary.
+
+```bash
+cp .env.example .env
+# Edit .env and set BOTH:
+# FLOWSTATE_API_TOKEN=$(openssl rand -hex 32)
+# FLOWSTATE_DB_PASSWORD=$(openssl rand -hex 24)
+docker compose up --build -d
+```
+
+Open http://localhost:3001 and enter the operator token from your local `.env` file. No token is committed to the repository. The HTTP port binds to 127.0.0.1 only. The DB and worker have no public ports.
+
+**Important for existing PostgreSQL volumes:** files in `docker-entrypoint-initdb.d` execute only on a brand-new database. Apply `sql/002_durable_jobs.sql` manually to existing data, for example using `docker compose exec -T db psql -U flowstate -d flowstate < sql/002_durable_jobs.sql`, before starting the worker. Never run `docker compose down -v` unless you intend to destroy your data.
+
+**Free means locally hosted:** your computer must remain powered on, and optional calls to OpenAI are not free. This is not a public secure production deployment.
+
 # Durable execution and secure events (free local deployment)
 
 No Redis, paid queue, paid worker host, or paid AI API is required for **start_run** jobs.
 Uses PostgreSQL (already part of the project) and a standalone Node worker.
 
 ## Start locally
-1. Start PostgreSQL with `docker compose up -d db`.
+1. For manual development, start PostgreSQL with `docker compose up -d db` after setting the required Docker Compose environment variables.
 2. Apply `sql/schema.sql` for a fresh DB, then `sql/002_durable_jobs.sql`.
 3. Set `FLOWSTATE_API_TOKEN` to a randomly generated 32-byte secret (e.g. `openssl rand -hex 32`) in your server environment. Run `npm run dev` and, in another terminal, `npm run worker`. Enter the operator token in the dashboard access screen.
 4. Create/activate a workflow and start a run. The worker advances pending -> running, recording an event transactionally.
