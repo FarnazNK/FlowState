@@ -14,3 +14,4 @@ CREATE TABLE IF NOT EXISTS run_events (
  event_type TEXT NOT NULL, payload JSONB NOT NULL DEFAULT '{}'::jsonb,
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS run_events_run_id_id_idx ON run_events(run_id, id);
