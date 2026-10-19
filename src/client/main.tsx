@@ -77,7 +77,7 @@ function App() {
    <button className={'navItem '+(view==='workflows'?'active':'')} onClick={()=>setView('workflows')}><Icon name="layers" size={18}/>Workflows<span className="navCount">{workflows.length}</span></button>
    <button className={'navItem '+(view==='activity'?'active':'')} onClick={()=>setView('activity')}><Icon name="activity" size={18}/>Activity</button>
   </nav>
-  <div className="sidebarBottom"><div className="infra"><div className="infraHead"><Icon name="database" size={17}/> Infrastructure</div><p>PostgreSQL-backed execution state and event history.</p><span className="infraCaption">TYPE-SAFE · AUDITABLE</span></div><div className="sideFooter"><span className="avatar">FS</span><span>FlowState Workspace<small>Engineering console</small></span></div></div>
+  <div className="sidebarBottom"><div className="sideFooter"><span className="avatar">FS</span><span>FlowState Workspace<small>Engineering console</small></span></div></div>
  </aside>
  <div className="content">
   <header className="topbar"><div className="crumb"><span>Workspace</span><Icon name="chevron" size={14}/><strong>{sectionTitle}</strong></div><div className="topActions"><span className="environment"><span className="statusDot"/>PRODUCTION</span><button className="iconButton" onClick={refresh} disabled={busy} aria-label="Refresh data" title="Refresh data"><Icon name="refresh" size={17}/></button><a className="iconButton externalLink" title="Repository" aria-label="Open GitHub repository" href="https://github.com/FarnazNK/FlowState" target="_blank" rel="noreferrer"><Icon name="external" size={17}/></a></div></header>
