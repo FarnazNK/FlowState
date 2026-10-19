@@ -10,7 +10,7 @@ export const repo = {
  list: async (input: {limit:number;cursor?:{createdAt:string;id:string};search?:string;status?:Workflow['status']}) => {
   const rows = (await pool.query<Workflow>(
    `SELECT id,name,status,created_at FROM workflows
-      WHERE ($1::text IS NULL OR strpos(lower(name), $1)>0)
+      WHERE ($1::text IS NULL OR to_tsvector('simple', name) @@ plainto_tsquery('simple', $1))
         AND ($2::text IS NULL OR status=$2)
         AND ($3::timestamptz IS NULL OR (created_at,id)<($3::timestamptz,$4::uuid))
       ORDER BY created_at DESC,id DESC LIMIT $5`,
