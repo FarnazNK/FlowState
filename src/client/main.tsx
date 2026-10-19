@@ -16,7 +16,7 @@ const transitions: Record<RunState, RunState[]> = {
 const stateLabel: Record<RunState, string> = {
   pending: 'Queued', running: 'Running', approval: 'Needs approval', completed: 'Completed', failed: 'Failed'
 };
-const dateLabel = (date: unknown) => new Date(String(date)).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+const dateLabel = (date: unknown) => { const parsed = new Date(String(date)); return Number.isNaN(parsed.getTime()) ? 'Unknown date' : parsed.toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); };
 const shortId = (id: string) => id.slice(0, 8).toUpperCase();
 const Icon = ({ name, size=20 }: { name: string; size?: number }) => {
  const paths: Record<string, React.ReactNode> = {
@@ -48,18 +48,20 @@ function App() {
  const [name, setName] = useState('');
  const [documentText,setDocumentText]=useState('');
  const [filter, setFilter] = useState('');
+ const [statusFilter,setStatusFilter]=useState<'all'|'draft'|'active'|'paused'>('all');
  const [view, setView] = useState<'overview'|'workflows'|'activity'>('overview');
  const [dialog, setDialog] = useState(false);
  const [loading, setLoading] = useState(true);
  const [busy, setBusy] = useState(false);
+ const [lastUpdated,setLastUpdated]=useState<Date | null>(null);
  const [notice, setNotice] = useState('');
  const [error, setError] = useState('');
  const selected = workflows.find(w=>w.id===selectedId);
  const run = runs.find(r=>r.id===runId);
  const activeCount = workflows.filter(w=>w.status==='active').length;
  const completedCount = runs.filter(r=>r.state==='completed').length;
- const filtered = useMemo(()=>workflows.filter(w=>w.name.toLowerCase().includes(filter.toLowerCase())),[workflows,filter]);
- const loadWorkflows=useCallback(async()=>{setWorkflows(await api.workflows.query())},[]);
+ const filtered = useMemo(()=>workflows.filter(w=>w.name.toLowerCase().includes(filter.trim().toLowerCase()) && (statusFilter==='all'||w.status===statusFilter)),[workflows,filter,statusFilter]);
+ const loadWorkflows=useCallback(async()=>{setWorkflows(await api.workflows.query());setLastUpdated(new Date())},[]);
  const loadRuns=useCallback(async(id:string)=>{setRuns(await api.runs.query({workflowId:id}))},[]);
  useEffect(()=>{let mounted=true;api.workflows.query().then(items=>{if(mounted){setWorkflows(items);setSelectedId(old=>old||items[0]?.id||'')}}).catch(()=>{if(mounted)setError('Cannot reach the workflow API. Check backend health and retry.')}).finally(()=>{if(mounted)setLoading(false)});return()=>{mounted=false}},[]);
  useEffect(()=>{let mounted=true;if(!selectedId){setRuns([]);setRunId('');return}api.runs.query({workflowId:selectedId}).then(data=>{if(mounted){setRuns(data);setRunId(old=>data.some(r=>r.id===old)?old:data[0]?.id||'')}}).catch(()=>{if(mounted)setError('Could not load execution history.')});return()=>{mounted=false}},[selectedId]);
