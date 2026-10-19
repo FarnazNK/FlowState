@@ -135,6 +135,29 @@ FlowState limits work per request and avoids unnecessary UI refetching:
 
 These improvements reduce per-request data volume, but **do not establish capacity for millions of concurrent users**. That requires tenant-scoped authorization, load tests, capacity planning, rate limiting, job queues, database connection pooling, and production observability.
 
+## Performance measurement
+
+A reproducible, **read-only** PostgreSQL benchmark is available:
+
+```bash
+DATABASE_URL=... npm run bench:db
+BENCH_SAMPLES=500 BENCH_CONCURRENCY=8 npm run bench:db
+```
+
+It warms each query, then reports p50/p95/p99/max client-observed query latency and achieved requests per second for workflow pages, workflow search, run pages, event pages and a simple health probe. Its output includes the dataset size and timestamp; compare results only with the same dataset, region, configuration and concurrency. It does not simulate authenticated users, writes, the frontend, AI inference, or distributed production traffic. **Do not run high-concurrency tests against shared production infrastructure without an agreed capacity window.**
+
+### Baseline database query plans (2026-10-19)
+
+Measured with PostgreSQL `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` against the existing Neon development dataset:
+
+| Query | Rows returned | Database execution time |
+| --- | ---: | ---: |
+| Workflow page (limit 26) | 4 | 0.042 ms |
+| Run page (limit 26) | 1 | 0.088 ms |
+| Event page (limit 50) | 1 | 0.044 ms |
+
+Dataset at measurement: **4 workflows, 4 runs, 5 events**. These figures are single-query server-side execution times, **not** p95 latency, browser response time, throughput, or evidence of million-user capacity. PostgreSQL can prefer a sequential scan/sort on tiny tables even when indexes exist. The benchmark script must be run in an environment that can connect to the database; no large-load result has been established.
+
 ## Run locally
 
 Requires Node.js 20+ and Docker.
