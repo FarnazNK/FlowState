@@ -95,10 +95,10 @@ Procedures are served at `/trpc/<name>`.
 
 | Procedure | Input | Notes |
 | --- | --- | --- |
-| `workflows` | — | Latest 100; ordered by creation time and ID |
+| `workflows` | `{ limit?, cursor?, search?, status? }` | Cursor pages (default 25, max 50); indexed search |
 | `createWorkflow` | `{ name }` | Created as `draft` |
 | `activateWorkflow` | `{ id }` | |
-| `runs` | `{ workflowId }` | Latest 100 for one workflow |
+| `runs` | `{ workflowId, limit?, cursor? }` | Cursor pages (default 25, max 50) |
 | `startRun` | `{ workflowId }` | Active workflows only |
 | `events` | `{ runId, before? }` | Newest 50 events; use an event ID cursor to load older history |
 | `transition` | `{ runId, expected, next }` | `CONFLICT` if disallowed or stale |
@@ -114,7 +114,7 @@ FlowState keeps UI work and database reads bounded as execution histories grow:
 - **Targeted SQL:** list and event queries project explicit columns rather than `SELECT *`. Composite indexes support workflow ordering, runs by workflow and creation time, and audit events by run and ID.
 - **Caching:** the standalone Node server caches built assets and sets immutable cache headers for fingerprinted assets. The Vercel health handler briefly caches database readiness results to reduce repeated probes.
 
-These are implementation changes, **not benchmarked speedup claims**. Workflow and run listings still return at most 100 records; pagination for those lists remains future work.
+These improvements are not evidence of million-user throughput. Workflow and run lists support cursor-based pagination; `workflows` supports indexed server-side search.
 
 ## Performance and data access
 
@@ -190,4 +190,4 @@ CI runs the build, tests, and Docker build on every push and PR. On Vercel, set 
 
 ## Roadmap
 
-Authentication and approval policies, pausing workflows, worker queues, retries, rate limits, migrations, metrics, performance benchmarks, and end-to-end tests.
+Authentication and approval policies, durable worker queues, retries, rate limits, migrations, metrics, representative load testing, and end-to-end tests.
