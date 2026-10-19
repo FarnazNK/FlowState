@@ -10,12 +10,11 @@ export const repo = {
  list: async (input: {limit:number;cursor?:{createdAt:string;id:string};search?:string;status?:Workflow['status']}) => {
   const rows = (await pool.query<Workflow>(
    `SELECT id,name,status,created_at FROM workflows
-      WHERE ($1::text IS NULL OR lower(name) LIKE $1 ESCAPE '\\')
+      WHERE ($1::text IS NULL OR strpos(lower(name), $1)>0)
         AND ($2::text IS NULL OR status=$2)
         AND ($3::timestamptz IS NULL OR (created_at,id)<($3::timestamptz,$4::uuid))
       ORDER BY created_at DESC,id DESC LIMIT $5`,
-   [input.search ? '%'+input.search.toLowerCase().replace(/[\\%_]/g,'\\ list: async () => (await pool.query<Workflow>('SELECT id,name,status,created_at FROM workflows ORDER BY created_at DESC,id DESC LIMIT 100')).rows,')+'%' : null,
-    input.status??null,input.cursor?.createdAt??null,input.cursor?.id??null,input.limit+1]
+   [input.search?.toLowerCase()??null,input.status??null,input.cursor?.createdAt??null,input.cursor?.id??null,input.limit+1]
   )).rows;
   const items=rows.slice(0,input.limit);
   const last=items.at(-1);
