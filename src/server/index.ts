@@ -19,7 +19,7 @@ createServer((req,res)=>{
   const pathname=path==='/'?'/index.html':path;
   const file=resolve(dist,'.'+decodeURIComponent(pathname));
   if(file!==dist&&!file.startsWith(dist+sep)){res.writeHead(403);res.end();return}
-  try{if(!(await stat(file)).isFile())throw Error();const cached=staticCache.get(file);const type=mime[extname(file)]??'application/octet-stream';const contents=cached?.body??await readFile(file);if(!cached&&file.includes(sep+'assets'+sep))staticCache.set(file,{body:contents,type});res.writeHead(200,{'content-type':type,'cache-control':file.includes(sep+'assets'+sep)?'public,max-age=31536000,immutable':'no-cache'});res.end(contents)}
+  try{const cached=staticCache.get(file);if(!cached&&!(await stat(file)).isFile())throw Error();const type=mime[extname(file)]??'application/octet-stream';const contents=cached?.body??await readFile(file);if(!cached&&file.includes(sep+'assets'+sep))staticCache.set(file,{body:contents,type});res.writeHead(200,{'content-type':type,'cache-control':file.includes(sep+'assets'+sep)?'public,max-age=31536000,immutable':'no-cache'});res.end(contents)}
   catch{if(path.startsWith('/assets/')||extname(path)){res.writeHead(404);res.end('Not found');return}
    try{const html=await readFile(resolve(dist,'index.html'));res.writeHead(200,{'content-type':'text/html'});res.end(html)}catch{res.writeHead(500);res.end('Build missing')}}
  })().catch(()=>{res.writeHead(500);res.end('Server error')});
