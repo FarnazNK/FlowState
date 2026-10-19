@@ -127,7 +127,13 @@ FlowState limits work per request and avoids unnecessary UI refetching:
 - **Lower render overhead:** derived dashboard counts are memoized, the date formatter is reused, and individual event payload previews are capped at 500 characters.
 - **Lighter health and asset serving:** the Vercel health handler caches the database probe result for five seconds within a warm function instance. The standalone Node server uses long-lived caching for fingerprinted static assets and avoids repeated disk reads after the first load.
 
-**Scaling boundary:** workflow and run lists are still capped at 100 items, not fully paginated. The event cursor uses the sequence ID rather than timestamps, keeping history order stable. No measured latency or throughput improvement is claimed.
+**Scaling boundary:** workflow and run listings now use keyset pagination; full-text search is backed by a PostgreSQL GIN index. The event cursor uses the sequence ID rather than timestamps, keeping history order stable. No measured latency or throughput improvement is claimed.
+
+### Pagination contract
+
+`workflows` and `runs` return `{ items, nextCursor }`. Supply the previous response's `nextCursor` to load the next page. A null cursor means no more results. Cursor ordering is deterministic by `created_at DESC, id DESC`. Changing filters resets pagination; workflow search uses PostgreSQL full-text token matching rather than substring matching.
+
+These improvements reduce per-request data volume, but **do not establish capacity for millions of concurrent users**. That requires tenant-scoped authorization, load tests, capacity planning, rate limiting, job queues, database connection pooling, and production observability.
 
 ## Run locally
 
@@ -161,4 +167,4 @@ CI runs the build, tests, and Docker build on every push and PR. On Vercel, set 
 
 ## Roadmap
 
-Authentication and approval policies, workflow/run list pagination, pausing workflows, worker queues, retries, rate limits, migrations, metrics, performance benchmarks, and end-to-end tests.
+Authentication and approval policies, pausing workflows, worker queues, retries, rate limits, migrations, metrics, performance benchmarks, and end-to-end tests.
