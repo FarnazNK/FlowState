@@ -1,76 +1,43 @@
-# FlowState — Typed Workflow Orchestration
+# FlowState — Workflow Operations Console
 
-> **FlowState at a glance:** A React/TypeScript workflow console backed by a TypeScript/tRPC API, Effect service layer, and PostgreSQL. Operators create workflows, launch executions, advance them through explicit states, and inspect auditable execution events.
->
-> **Try it:** [Hosted frontend](https://flowstate-steel-psi.vercel.app) · [API health](https://flowstate-steel-psi.vercel.app/api/healthz) · [Frontend source](src/client/) · [Backend source](src/server/) · [Vercel handlers](api/)
->
-> **Engineering highlights:** Shared TypeScript API types through tRPC; Zod request validation; Effect error modeling; optimistic, conditional state transitions; transactional event history; typed React dashboard; PostgreSQL persistence; Docker/Compose; and GitHub Actions.
->
-> **Design decisions:** State transitions use a compare-and-swap update to reject stale concurrent writes. Domain changes and events are committed in one transaction. The Vercel deployment serves a static Vite frontend and TypeScript serverless API handlers from one origin.
->
-> **Current boundaries:** No autonomous AI worker, LLM calls, tenant authorization, queue scheduling, real-time stream, or file processing is implemented. Use synthetic data only. A Vercel READY deployment is not proof of passing end-to-end tests.
+[![Quality Gate](https://github.com/FarnazNK/FlowState/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/FarnazNK/FlowState/actions/workflows/ci.yml)
+[![Vercel](https://img.shields.io/badge/hosting-Vercel-black?logo=vercel)](https://flowstate-steel-psi.vercel.app)
 
-[![CI](https://github.com/FarnazNK/FlowState/actions/workflows/ci.yml/badge.svg)](https://github.com/FarnazNK/FlowState/actions/workflows/ci.yml)
+**Create workflows, run them, inspect every state change, and review extracted document fields in one operational workspace.**
+
+[Open dashboard](https://flowstate-steel-psi.vercel.app) · [Source code](src/) · [API health](https://flowstate-steel-psi.vercel.app/api/healthz) · [CI runs](https://github.com/FarnazNK/FlowState/actions/workflows/ci.yml)
+
+## What you can do
+
+- **Explore immediately:** four sample workflows in the database, with queued, running, approval, and completed runs.
+- **Run a workflow:** create and activate workflows, start executions, advance or fail runs, and inspect the timeline.
+- **Review document intake:** paste synthetic document content into a running execution, request field extraction from a configured LLM, and inspect schema-validated results before marking the run complete.
+- **Audit changes:** each accepted state transition produces an event in the same PostgreSQL transaction; stale concurrent transitions are rejected.
+
+**Current scope:** The workflow state machine and audit events are operational features. AI extraction requires `OPENAI_API_KEY`; approvals are manual state changes rather than authenticated sign-off. Use sample data, not sensitive documents.
 
 ## Architecture
 
 ```text
-Browser (React + Vite)
-        |
-        | type-safe tRPC client
-        v
-Vercel API (/trpc/* -> api/trpc.ts)
-        |
-        v
-Zod validation + tRPC router
-        |
-        v
-Effect TS service (typed failures, state machine)
-        |
-        v
-PostgreSQL repository (parameterized SQL)
-        |
-        +--> workflows
-        +--> runs
-        +--> run_events (atomic with transitions)
+React/Vite dashboard
+   |
+   v
+Type-safe tRPC API + Zod schemas (Vercel serverless)
+   |
+   v
+Effect Context / Layer services
+   |                         \
+   v                          v
+PostgreSQL repository       LLM intake provider (optional)
+   |                          |
+   +---- atomic run events <--+-- schema-validated extraction
 ```
 
-**Core code:** [router](src/server/router.ts) · [service](src/server/service.ts) · [database repository](src/server/db.ts) · [state-machine tests](tests/state-machine.test.ts).
+The [repository](src/server/db.ts) uses parameterized queries, transactions, and compare-and-swap state updates. The [service](src/server/service.ts) wires Effect services using `Context.Tag` and `Layer`, with typed failures. The [intake module](src/server/intake.ts) validates the model's JSON using Zod before storing it. The [frontend](src/client/main.tsx) displays workflows, runs, and event details with explicit loading and error states.
 
-## Current behavior
+## Run locally
 
-1. Create a workflow.
-2. Activate it.
-3. Start an execution (initial state: `pending`).
-4. Move through `running`, `approval`, `completed`, or `failed`, subject to transition rules.
-5. Inspect persisted event history for each execution.
-
-### Execution state machine
-
-```text
-pending -> running -> approval -> running
-    \         |         |          |
-     -> failed |         -> completed
-               -> completed / failed
-```
-
-Completed and failed runs are terminal. Updates require the expected prior state, which prevents a stale client from silently overwriting another transition.
-
-## Technology
-
-| Layer | Stack |
-|---|---|
-| Frontend | React, TypeScript, Vite |
-| API | tRPC, Zod, Node.js |
-| Services | Effect TS |
-| Database | PostgreSQL, pg |
-| Hosting | Vercel frontend + serverless backend |
-| Local infrastructure | Docker, Docker Compose |
-| CI | GitHub Actions (build, tests, Docker image) |
-
-## Local development
-
-Requires Node.js 20+ and Docker Compose.
+Requires Node.js 20+ and Docker.
 
 ```bash
 npm install
@@ -79,35 +46,20 @@ cp .env.example .env
 npm run dev
 ```
 
-Frontend: http://localhost:5173 · API: http://localhost:3001 · Health: http://localhost:3001/healthz.
+Open http://localhost:5173. The API is served on http://localhost:3001.
 
-For a containerized frontend, API and database:
+To enable real document extraction, add `OPENAI_API_KEY` to your local `.env`, or to Vercel as a **server-only** secret. `OPENAI_MODEL` is optional; its default is `gpt-4o-mini`. Without a key, workflow operations still work, but AI extraction returns a clear configuration error.
 
-```bash
-docker compose up --build
-```
-
-Open http://localhost:3001.
-
-## Validation
+## Build, tests, and deployment
 
 ```bash
 npm run build
 npm test
+docker compose up --build
 ```
 
-GitHub Actions runs these checks and builds the Docker image on pushes and pull requests. See [.github/workflows/ci.yml](.github/workflows/ci.yml). The existence of a workflow does not mean every run has passed.
+The [GitHub Actions quality gate](.github/workflows/ci.yml) runs the TypeScript/Vite build, tests, and Docker build. The badge above reflects the actual workflow status rather than a hardcoded claim. Vercel serves both the frontend and the serverless tRPC handlers from the same origin. The database schema is in [sql/schema.sql](sql/schema.sql).
 
-## Deployment
+## Roadmap
 
-A Vercel project is connected to this repository. Its Vite frontend and API handlers are hosted together under the same domain, with `vercel.json` rewriting `/trpc/:procedure` to the matching API handler. `DATABASE_URL` is configured as an encrypted server-side environment variable. The separate PostgreSQL schema is in [sql/schema.sql](sql/schema.sql).
-
-Check the [frontend](https://flowstate-steel-psi.vercel.app), [health endpoint](https://flowstate-steel-psi.vercel.app/api/healthz), and [workflow query](https://flowstate-steel-psi.vercel.app/trpc/workflows) independently before considering the hosted system verified.
-
-## Security and operational boundaries
-
-This is an engineering prototype without login, multi-tenant isolation, secrets management per workflow, rate limiting, or full observability. Do not upload or process confidential or production data. Human approval here is an explicit execution state, **not** an authenticated approval system.
-
-## Future engineering work
-
-Durable background workers, task queues, idempotency keys, retry schedules, Effect dependency layers, authenticated approval policies, observability, AI-assisted workflow steps, and integration testing against ephemeral Postgres.
+Authenticated approval policies, durable worker queues, retry scheduling, rate limits, better operational metrics, and end-to-end browser tests. The current build is a workflow console, not an autonomous workflow engine.
