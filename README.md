@@ -14,7 +14,7 @@
 - **Review document intake:** paste synthetic document content into a running execution, request field extraction from a configured LLM, and inspect schema-validated results before marking the run complete.
 - **Audit changes:** each accepted state transition produces an event in the same PostgreSQL transaction; stale concurrent transitions are rejected.
 
-**Current scope:** The workflow state machine and audit events are operational features. AI extraction requires `OPENAI_API_KEY`; approvals are manual state changes rather than authenticated sign-off. Use sample data, not sensitive documents.
+**Current scope:** The workflow state machine and audit events are operational features. AI extraction requires `OPENAI_API_KEY`; approvals are manual state changes rather than authenticated sign-off.
 
 ## Technology stack
 
@@ -102,8 +102,7 @@ cp .env.example .env
 npm run dev
 ```
 
-
-To enable real document extraction, add `OPENAI_API_KEY` to your local `.env`, or to Vercel as a **server-only** secret. `OPENAI_MODEL` is optional; its default is `gpt-4o-mini`. Without a key, workflow operations still work, but AI extraction returns a clear configuration error.
+To enable real document extraction, add `OPENAI_API_KEY` to your local `.env`, or to Vercel as a **server-only** secret. `OPENAI_MODEL` is optional; its default is `gpt-4o-mini`. Without a key, workflow and audit features still work.
 
 ## Build, tests, and deployment
 
@@ -113,8 +112,8 @@ npm test
 docker compose up --build
 ```
 
-The [GitHub Actions quality gate](.github/workflows/ci.yml) runs the TypeScript/Vite build, tests, and Docker build. The badge above reflects the actual workflow status rather than a hardcoded claim. Vercel serves both the frontend and the serverless tRPC handlers from the same origin. The database schema is in [sql/schema.sql](sql/schema.sql).
+The [GitHub Actions quality gate](.github/workflows/ci.yml) runs the TypeScript/Vite build, tests, and Docker build. The badge above reflects the actual workflow status rather than a hardcoded claim.
 
 ## Roadmap
 
-Authenticated approval policies, durable worker queues, retry scheduling, rate limits, better operational metrics, and end-to-end browser tests. The current build is a workflow console, not an autonomous workflow engine.
+Authenticated approval policies, durable worker queues, retry scheduling, rate limits, better operational metrics, and end-to-end browser tests. The current build is a workflow console, not an autonomous agent.
