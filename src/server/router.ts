@@ -9,6 +9,7 @@ export type ApiContext={authorization?:string};
 const t=initTRPC.context<ApiContext>().create();
 const protectedProcedure=t.procedure.use(({ctx,next})=>{
  const token=process.env.FLOWSTATE_API_TOKEN;
+ if(!token||Buffer.byteLength(token)<32)throw new TRPCError({code:'UNAUTHORIZED',message:'Operator access not configured'});
  const supplied=ctx.authorization?.startsWith('Bearer ')?ctx.authorization.slice(7):'';
  const a=Buffer.from(supplied),b=Buffer.from(token??'');
  if(!token||a.length!==b.length||!timingSafeEqual(a,b)){
