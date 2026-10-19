@@ -1,10 +1,21 @@
 import { initTRPC, TRPCError } from '@trpc/server';
+import {timingSafeEqual} from 'node:crypto';
 import { Effect } from 'effect';
 import { z } from 'zod';
 import { service, AppLayer } from './service.js';
 import { Repository } from './db.js';
 import { IntakeModel } from './intake.js';
-const t=initTRPC.create();
+export type ApiContext={authorization?:string};
+const t=initTRPC.context<ApiContext>().create();
+const protectedProcedure=t.procedure.use(({ctx,next})=>{
+ const token=process.env.FLOWSTATE_API_TOKEN;
+ const supplied=ctx.authorization?.startsWith('Bearer ')?ctx.authorization.slice(7):'';
+ const a=Buffer.from(supplied),b=Buffer.from(token??'');
+ if(!token||a.length!==b.length||!timingSafeEqual(a,b)){
+  throw new TRPCError({code:'UNAUTHORIZED',message:'Operator access required'});
+ }
+ return next();
+});
 const validWorkflowName=z.string().trim().min(1).max(120);
 const runState=z.enum(['pending','running','approval','completed','failed']);
 const id=z.string().uuid();
@@ -20,13 +31,13 @@ async function execute<T,E extends {_tag:string}>(program:Effect.Effect<T,E,Repo
  throw new TRPCError({code:'INTERNAL_SERVER_ERROR',message:'Database operation failed'});
 }
 export const appRouter=t.router({
- workflows:t.procedure.input(page.extend({search:z.string().trim().max(120).optional(),status:z.enum(['draft','active','paused']).optional()})).query(({input})=>execute(service.list(input))),
- createWorkflow:t.procedure.input(z.object({name:validWorkflowName})).mutation(({input})=>execute(service.create(input.name))),
- activateWorkflow:t.procedure.input(z.object({id})).mutation(({input})=>execute(service.activate(input.id))),
- runs:t.procedure.input(page.extend({workflowId:id})).query(({input})=>execute(service.runs(input.workflowId,input))),
- startRun:t.procedure.input(z.object({workflowId:id})).mutation(({input})=>execute(service.start(input.workflowId))),
- events:t.procedure.input(z.object({runId:id,before:z.number().int().positive().optional()})).query(({input})=>execute(service.events(input.runId,input.before))),
- intake:t.procedure.input(z.object({runId:id,text:z.string().min(40).max(12000)})).mutation(({input})=>execute(service.intake(input.runId,input.text))),
- transition:t.procedure.input(z.object({runId:id,expected:runState,next:runState})).mutation(({input})=>execute(service.transition(input.runId,input.expected,input.next)))
+ workflows:protectedProcedure.input(page.extend({search:z.string().trim().max(120).optional(),status:z.enum(['draft','active','paused']).optional()})).query(({input})=>execute(service.list(input))),
+ createWorkflow:protectedProcedure.input(z.object({name:validWorkflowName})).mutation(({input})=>execute(service.create(input.name))),
+ activateWorkflow:protectedProcedure.input(z.object({id})).mutation(({input})=>execute(service.activate(input.id))),
+ runs:protectedProcedure.input(page.extend({workflowId:id})).query(({input})=>execute(service.runs(input.workflowId,input))),
+ startRun:protectedProcedure.input(z.object({workflowId:id})).mutation(({input})=>execute(service.start(input.workflowId))),
+ events:protectedProcedure.input(z.object({runId:id,before:z.number().int().positive().optional()})).query(({input})=>execute(service.events(input.runId,input.before))),
+ intake:protectedProcedure.input(z.object({runId:id,text:z.string().min(40).max(12000)})).mutation(({input})=>execute(service.intake(input.runId,input.text))),
+ transition:protectedProcedure.input(z.object({runId:id,expected:runState,next:runState})).mutation(({input})=>execute(service.transition(input.runId,input.expected,input.next)))
 });
 export type AppRouter=typeof appRouter;
