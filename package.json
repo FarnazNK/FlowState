@@ -10,7 +10,8 @@
     "dev": "concurrently \"tsx watch src/server/index.ts\" \"vite\"",
     "build": "tsc --noEmit && vite build",
     "start": "tsx src/server/index.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bench:db": "node scripts/benchmark.mjs"
   },
   "dependencies": {
     "@trpc/client": "^11.0.0",
