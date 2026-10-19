@@ -8,6 +8,8 @@ import {pool} from './db.js';
 import {appRouter} from './router.js';
 const port=Number(process.env.PORT ?? 3001);
 const dist=resolve(process.cwd(),'dist');
+let activeStreams=0;
+const maxStreams=20;
 const staticCache = new Map<string, {body:Buffer; type:string}>();
 const mime:Record<string,string>={'.html':'text/html; charset=utf-8','.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml'};
 createServer((req,res)=>{
@@ -26,11 +28,13 @@ createServer((req,res)=>{
   if(a.length!==b.length||!timingSafeEqual(a,b)){res.writeHead(401,{'www-authenticate':'Bearer','cache-control':'no-store'});res.end();return}
   const match=/^\/api\/runs\/([0-9a-fA-F-]{36})\/events\/stream$/.exec(path);
   if(!match){res.writeHead(404);res.end();return}
+  if(activeStreams>=maxStreams){res.writeHead(429,{'retry-after':'10','cache-control':'no-store'});res.end();return}
   const runId=match[1];
   let cursor=Number(req.headers['last-event-id']??new URL(req.url??'','http://localhost').searchParams.get('after')??0);
   if(!Number.isSafeInteger(cursor)||cursor<0){res.writeHead(400);res.end();return}
   void pool.query('SELECT id FROM runs WHERE id=$1',[runId]).then(result=>{
    if(!result.rowCount){res.writeHead(404);res.end();return}
+   activeStreams++;
    res.writeHead(200,{'content-type':'text/event-stream; charset=utf-8','cache-control':'no-store, no-transform','x-content-type-options':'nosniff','x-accel-buffering':'no','connection':'keep-alive'});
    res.write(': connected\n\n');
    let busy=false;
@@ -48,7 +52,7 @@ createServer((req,res)=>{
    };
    void poll();
    const timer=setInterval(()=>void poll(),2000);
-   res.on('close',()=>clearInterval(timer));
+   res.on('close',()=>{clearInterval(timer);activeStreams=Math.max(0,activeStreams-1)});
   }).catch(()=>{res.writeHead(503);res.end()});
   return;
  }
