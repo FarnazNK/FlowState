@@ -8,6 +8,8 @@ const t=initTRPC.create();
 const validWorkflowName=z.string().trim().min(1).max(120);
 const runState=z.enum(['pending','running','approval','completed','failed']);
 const id=z.string().uuid();
+const cursor=z.object({createdAt:z.string().datetime(),id});
+const page=z.object({limit:z.number().int().min(1).max(50).default(25),cursor:cursor.optional()});
 async function execute<T,E extends {_tag:string}>(program:Effect.Effect<T,E,Repository | IntakeModel>):Promise<T>{
  const result=await Effect.runPromise(Effect.either(Effect.provide(program,AppLayer)));
  if(result._tag==='Right')return result.right;
@@ -18,10 +20,10 @@ async function execute<T,E extends {_tag:string}>(program:Effect.Effect<T,E,Repo
  throw new TRPCError({code:'INTERNAL_SERVER_ERROR',message:'Database operation failed'});
 }
 export const appRouter=t.router({
- workflows:t.procedure.query(()=>execute(service.list())),
+ workflows:t.procedure.input(page.extend({search:z.string().trim().max(120).optional(),status:z.enum(['draft','active','paused']).optional()})).query(({input})=>execute(service.list(input))),
  createWorkflow:t.procedure.input(z.object({name:validWorkflowName})).mutation(({input})=>execute(service.create(input.name))),
  activateWorkflow:t.procedure.input(z.object({id})).mutation(({input})=>execute(service.activate(input.id))),
- runs:t.procedure.input(z.object({workflowId:id})).query(({input})=>execute(service.runs(input.workflowId))),
+ runs:t.procedure.input(page.extend({workflowId:id})).query(({input})=>execute(service.runs(input.workflowId,input))),
  startRun:t.procedure.input(z.object({workflowId:id})).mutation(({input})=>execute(service.start(input.workflowId))),
  events:t.procedure.input(z.object({runId:id,before:z.number().int().positive().optional()})).query(({input})=>execute(service.events(input.runId,input.before))),
  intake:t.procedure.input(z.object({runId:id,text:z.string().min(40).max(12000)})).mutation(({input})=>execute(service.intake(input.runId,input.text))),
