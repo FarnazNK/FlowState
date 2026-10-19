@@ -4,7 +4,10 @@ import { createTRPCClient, httpBatchLink } from '@trpc/client';
 import type { AppRouter } from '../server/router.js';
 import './style.css';
 
-const api = createTRPCClient<AppRouter>({ links: [httpBatchLink({ url: '/trpc' })] });
+let operatorToken='';
+const api = createTRPCClient<AppRouter>({ links: [httpBatchLink({
+ url: '/trpc', headers:()=>operatorToken?{Authorization:'Bearer '+operatorToken}:{}
+})] });
 type WorkflowPage = Awaited<ReturnType<typeof api.workflows.query>>;
 type RunPage = Awaited<ReturnType<typeof api.runs.query>>;
 type Workflow = WorkflowPage['items'][number];
@@ -43,6 +46,8 @@ const Icon = ({ name, size=20 }: { name: string; size?: number }) => {
  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round">{paths[name]??paths.activity}</svg>;
 };
 function App() {
+ const [authorized,setAuthorized]=useState(false);
+ const [enteredToken,setEnteredToken]=useState('');
  const [workflows, setWorkflows] = useState<Workflow[]>([]);
  const [workflowCursor,setWorkflowCursor]=useState<WorkflowPage['nextCursor']>(null);
  const [runCursor,setRunCursor]=useState<RunPage['nextCursor']>(null);
@@ -65,6 +70,40 @@ function App() {
  const [lastUpdated,setLastUpdated]=useState<Date | null>(null);
  const [notice, setNotice] = useState('');
  const [error, setError] = useState('');
+ useEffect(()=>{
+  if(!authorized||!runId||!selectedId)return;
+  const controller=new AbortController();
+  const stream=async()=>{
+   try{
+    const response=await fetch('/api/runs/'+encodeURIComponent(runId)+'/events/stream',{
+     headers:{Authorization:'Bearer '+operatorToken,Accept:'text/event-stream'},
+     signal:controller.signal
+    });
+    if(!response.ok||!response.body)return;
+    const reader=response.body.getReader(),decoder=new TextDecoder();
+    let buffer='';
+    while(!controller.signal.aborted){
+     const result=await reader.read();
+     if(result.done)break;
+     buffer+=decoder.decode(result.value,{stream:true});
+     let boundary=buffer.indexOf('\\n\\n');
+     while(boundary>=0){
+      const frame=buffer.slice(0,boundary);
+      buffer=buffer.slice(boundary+2);
+      if(frame.includes('event: workflow.updated')){
+       void Promise.all([
+        api.runs.query({workflowId:selectedId,limit:25}).then(page=>{setRuns(page.items);setRunCursor(page.nextCursor)}),
+        api.events.query({runId}).then(data=>{setEvents(data);setMoreEvents(data.length===50)})
+       ]).catch(()=>{});
+      }
+      boundary=buffer.indexOf('\\n\\n');
+     }
+    }
+   }catch{/* SSE is optional; manual refresh remains available. */}
+  };
+  void stream();
+  return()=>controller.abort();
+ },[authorized,runId,selectedId]);
  const selected = workflows.find(w=>w.id===selectedId);
  const run = runs.find(r=>r.id===runId);
  const activeCount = useMemo(()=>workflows.reduce((n,w)=>n+(w.status==='active'?1:0),0),[workflows]);
@@ -85,6 +124,19 @@ function App() {
  const changeState=(next:RunState)=>{if(!run)return;const id=run.id, expected=run.state;void act(async()=>{await api.transition.mutate({runId:id,expected,next});await Promise.all([loadRuns(selectedId),api.events.query({runId:id}).then(items=>{setEvents(items);setMoreEvents(items.length===50)})])},'Execution moved to '+stateLabel[next].toLowerCase()+'.')};
  const loadMoreEvents=async()=>{if(eventsBusy||!runId||events.length===0)return;const selectedRun=runId;setEventsBusy(true);try{const page=await api.events.query({runId:selectedRun,before:Number(events[events.length-1].id)});if(selectedRun===runId){setEvents(old=>[...old,...page]);setMoreEvents(page.length===50)}}catch{setError('Could not load older events.')}finally{setEventsBusy(false)}};
  const sectionTitle=view==='overview'?'Operations overview':view==='workflows'?'Workflow explorer':'Execution activity';
+ if(!authorized)return <div style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:24}}>
+  <form style={{maxWidth:420,width:'100%',padding:32,border:'1px solid #64748b',borderRadius:16}} onSubmit={e=>{
+   e.preventDefault();if(!enteredToken.trim())return;
+   operatorToken=enteredToken.trim();setEnteredToken('');setAuthorized(true);
+  }}>
+   <h1>FlowState operator access</h1>
+   <p>This workspace requires the server-side operator token. Never enter a token on an untrusted site.</p>
+   <label htmlFor="accessToken">Operator token</label>
+   <input id="accessToken" type="password" autoComplete="off" required value={enteredToken}
+    onChange={e=>setEnteredToken(e.target.value)} style={{display:'block',width:'100%',padding:12,margin:'12px 0'}}/>
+   <button className="button buttonPrimary" type="submit">Unlock workspace</button>
+  </form>
+ </div>;
  return <div className="app">
  <aside className="sidebar">
   <a href="/" className="brand"><span className="brandmark"><Icon name="layers" size={21}/></span><span>flowstate<span className="branddot">.</span><small>WORKFLOW PLATFORM</small></span></a>
