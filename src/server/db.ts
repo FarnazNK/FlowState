@@ -38,6 +38,7 @@ export const repo = {
    await client.query('BEGIN');
    const item = (await client.query<Run>("INSERT INTO runs(id,workflow_id) SELECT $1,id FROM workflows WHERE id=$2 AND status='active' RETURNING id,workflow_id,state,created_at,updated_at",[randomUUID(), workflowId])).rows[0];
    if(item) await client.query('INSERT INTO run_events(run_id,event_type) VALUES($1,$2)',[item.id,'run.created']);
+   if(item) await client.query("INSERT INTO workflow_jobs(id,run_id,kind) VALUES($1,$2,'start_run') ON CONFLICT (run_id,kind) DO NOTHING",[randomUUID(),item.id]);
    await client.query('COMMIT'); return item;
   } catch(error){await client.query('ROLLBACK');throw error} finally{client.release()}
  },

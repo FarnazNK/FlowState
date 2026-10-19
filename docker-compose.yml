@@ -1,10 +1,11 @@
+# Free, local-only stack. Never expose this operator-only demo to the public internet.
 services:
   db:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: flowstate
       POSTGRES_USER: flowstate
-      POSTGRES_PASSWORD: flowstate
+      POSTGRES_PASSWORD: ${FLOWSTATE_DB_PASSWORD:?Set FLOWSTATE_DB_PASSWORD in .env}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U flowstate"]
       interval: 5s
@@ -12,15 +13,33 @@ services:
     volumes:
       - flowstate-db:/var/lib/postgresql/data
       - ./sql/schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+      - ./sql/002_durable_jobs.sql:/docker-entrypoint-initdb.d/002_durable_jobs.sql:ro
+    restart: unless-stopped
   app:
     build: .
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     environment:
-      DATABASE_URL: postgresql://flowstate:flowstate@db:5432/flowstate
+      DATABASE_URL: postgresql://flowstate:${FLOWSTATE_DB_PASSWORD:?Set FLOWSTATE_DB_PASSWORD in .env}@db:5432/flowstate
+      FLOWSTATE_API_TOKEN: ${FLOWSTATE_API_TOKEN:?Set FLOWSTATE_API_TOKEN in .env}
       PORT: "3001"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+  worker:
+    build: .
+    command: ["npm", "run", "worker"]
+    environment:
+      DATABASE_URL: postgresql://flowstate:${FLOWSTATE_DB_PASSWORD:?Set FLOWSTATE_DB_PASSWORD in .env}@db:5432/flowstate
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 volumes:
   flowstate-db:

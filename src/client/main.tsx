@@ -3,8 +3,12 @@ import { createRoot } from 'react-dom/client';
 import { createTRPCClient, httpBatchLink } from '@trpc/client';
 import type { AppRouter } from '../server/router.js';
 import './style.css';
+import {DemoApp} from './DemoApp.js';
 
-const api = createTRPCClient<AppRouter>({ links: [httpBatchLink({ url: '/trpc' })] });
+let operatorToken='';
+const api = createTRPCClient<AppRouter>({ links: [httpBatchLink({
+ url: '/trpc', headers:()=>operatorToken?{Authorization:'Bearer '+operatorToken}:{}
+})] });
 type WorkflowPage = Awaited<ReturnType<typeof api.workflows.query>>;
 type RunPage = Awaited<ReturnType<typeof api.runs.query>>;
 type Workflow = WorkflowPage['items'][number];
@@ -43,6 +47,11 @@ const Icon = ({ name, size=20 }: { name: string; size?: number }) => {
  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round">{paths[name]??paths.activity}</svg>;
 };
 function App() {
+ const [demoMode,setDemoMode]=useState(true);
+ const [authorized,setAuthorized]=useState(false);
+ const [enteredToken,setEnteredToken]=useState('');
+ const [authError,setAuthError]=useState('');
+ const [authBusy,setAuthBusy]=useState(false);
  const [workflows, setWorkflows] = useState<Workflow[]>([]);
  const [workflowCursor,setWorkflowCursor]=useState<WorkflowPage['nextCursor']>(null);
  const [runCursor,setRunCursor]=useState<RunPage['nextCursor']>(null);
@@ -65,17 +74,66 @@ function App() {
  const [lastUpdated,setLastUpdated]=useState<Date | null>(null);
  const [notice, setNotice] = useState('');
  const [error, setError] = useState('');
+ useEffect(()=>{
+  if(!authorized||!runId||!selectedId)return;
+  const controller=new AbortController();
+  let cursor=0;
+  const refresh=async()=>{
+   await Promise.all([
+    api.runs.query({workflowId:selectedId,limit:25}).then(page=>{if(!controller.signal.aborted){setRuns(page.items);setRunCursor(page.nextCursor)}}),
+    api.events.query({runId}).then(data=>{if(!controller.signal.aborted){setEvents(data);setMoreEvents(data.length===50)}})
+   ]);
+  };
+  const wait=(ms:number)=>new Promise<void>(resolve=>{
+   const timer=setTimeout(()=>{controller.signal.removeEventListener('abort',onAbort);resolve()},ms);
+   const onAbort=()=>{clearTimeout(timer);resolve()};
+   controller.signal.addEventListener('abort',onAbort,{once:true});
+  });
+  const stream=async()=>{
+   while(!controller.signal.aborted){
+    try{
+     const response=await fetch('/api/runs/'+encodeURIComponent(runId)+'/events/stream?after='+cursor,{
+      headers:{Authorization:'Bearer '+operatorToken,Accept:'text/event-stream'},
+      signal:controller.signal,
+      cache:'no-store'
+     });
+     if(response.status===401||response.status===403)break;
+     if(!response.ok||!response.body){await wait(3000);continue}
+     const reader=response.body.getReader(),decoder=new TextDecoder();
+     let buffer='';
+     while(!controller.signal.aborted){
+      const result=await reader.read();
+      if(result.done)break;
+      buffer+=decoder.decode(result.value,{stream:true});
+      if(buffer.length>65536){buffer='';continue}
+      let boundary=buffer.indexOf('\n\n');
+      while(boundary>=0){
+       const frame=buffer.slice(0,boundary);
+       buffer=buffer.slice(boundary+2);
+       const id=/^id: (\d+)$/m.exec(frame);
+       if(id)cursor=Math.max(cursor,Number(id[1]));
+       if(frame.includes('event: workflow.updated'))void refresh().catch(()=>{});
+       boundary=buffer.indexOf('\n\n');
+      }
+     }
+    }catch{ /* Reconnect after transient errors. */ }
+    await wait(3000);
+   }
+  };
+  void stream();
+  return()=>controller.abort();
+ },[authorized,runId,selectedId]);
  const selected = workflows.find(w=>w.id===selectedId);
  const run = runs.find(r=>r.id===runId);
  const activeCount = useMemo(()=>workflows.reduce((n,w)=>n+(w.status==='active'?1:0),0),[workflows]);
  const completedCount = useMemo(()=>runs.reduce((n,r)=>n+(r.state==='completed'?1:0),0),[runs]);
  const filtered = workflows;
  const workflowInput=useMemo(()=>({limit:25,search:filter.trim()||undefined,status:statusFilter==='all'?undefined:statusFilter}),[filter,statusFilter]);
- const loadWorkflows=useCallback(async()=>{const page=await api.workflows.query(workflowInput);setWorkflows(page.items);setWorkflowCursor(page.nextCursor);setLastUpdated(new Date())},[workflowInput]);
+ const loadWorkflows=useCallback(async()=>{const page=await api.workflows.query(workflowInput);setWorkflows(page.items);setWorkflowCursor(page.nextCursor);setLastUpdated(new Date())},[workflowInput,authorized]);
  const loadRuns=useCallback(async(id:string)=>{const page=await api.runs.query({workflowId:id,limit:25});setRuns(page.items);setRunCursor(page.nextCursor)},[]);
- useEffect(()=>{let mounted=true;setLoading(true);const timeout=setTimeout(()=>{void api.workflows.query(workflowInput).then(page=>{if(mounted){setWorkflows(page.items);setWorkflowCursor(page.nextCursor);setSelectedId(old=>old&&page.items.some(w=>w.id===old)?old:page.items[0]?.id||'')}}).catch(()=>{if(mounted)setError('Cannot reach the workflow API. Check backend health and retry.')}).finally(()=>{if(mounted)setLoading(false)})},filter?250:0);return()=>{mounted=false;clearTimeout(timeout)}},[workflowInput]);
- useEffect(()=>{let mounted=true;if(!selectedId){setRuns([]);setRunId('');setRunCursor(null);return}void api.runs.query({workflowId:selectedId,limit:25}).then(page=>{if(mounted){setRuns(page.items);setRunCursor(page.nextCursor);setRunId(old=>page.items.some(r=>r.id===old)?old:page.items[0]?.id||'')}}).catch(()=>{if(mounted)setError('Could not load executions.')});return()=>{mounted=false}},[selectedId]);
- useEffect(()=>{let mounted=true;if(!runId){setEvents([]);setMoreEvents(false);return}void api.events.query({runId}).then(data=>{if(mounted){setEvents(data);setMoreEvents(data.length===50)}}).catch(()=>{if(mounted)setError('Could not load audit events.')});return()=>{mounted=false}},[runId]);
+ useEffect(()=>{if(!authorized)return;let mounted=true;setLoading(true);const timeout=setTimeout(()=>{void api.workflows.query(workflowInput).then(page=>{if(mounted){setWorkflows(page.items);setWorkflowCursor(page.nextCursor);setSelectedId(old=>old&&page.items.some(w=>w.id===old)?old:page.items[0]?.id||'')}}).catch(()=>{if(mounted)setError('Cannot reach the workflow API. Check backend health and retry.')}).finally(()=>{if(mounted)setLoading(false)})},filter?250:0);return()=>{mounted=false;clearTimeout(timeout)}},[workflowInput]);
+ useEffect(()=>{if(!authorized)return;let mounted=true;if(!selectedId){setRuns([]);setRunId('');setRunCursor(null);return}void api.runs.query({workflowId:selectedId,limit:25}).then(page=>{if(mounted){setRuns(page.items);setRunCursor(page.nextCursor);setRunId(old=>page.items.some(r=>r.id===old)?old:page.items[0]?.id||'')}}).catch(()=>{if(mounted)setError('Could not load executions.')});return()=>{mounted=false}},[selectedId,authorized]);
+ useEffect(()=>{if(!authorized)return;let mounted=true;if(!runId){setEvents([]);setMoreEvents(false);return}void api.events.query({runId}).then(data=>{if(mounted){setEvents(data);setMoreEvents(data.length===50)}}).catch(()=>{if(mounted)setError('Could not load audit events.')});return()=>{mounted=false}},[runId,authorized]);
  const loadMoreWorkflows=async()=>{if(!workflowCursor||moreBusy)return;setMoreBusy(true);try{const page=await api.workflows.query({...workflowInput,cursor:workflowCursor});setWorkflows(old=>[...old,...page.items.filter(item=>!old.some(w=>w.id===item.id))]);setWorkflowCursor(page.nextCursor)}catch{setError('Could not load older workflows.')}finally{setMoreBusy(false)}};
  const loadMoreRuns=async()=>{if(!runCursor||!selectedId||moreBusy)return;setMoreBusy(true);try{const page=await api.runs.query({workflowId:selectedId,limit:25,cursor:runCursor});setRuns(old=>[...old,...page.items.filter(item=>!old.some(r=>r.id===item.id))]);setRunCursor(page.nextCursor)}catch{setError('Could not load older executions.')}finally{setMoreBusy(false)}};
  const act=async (f:()=>Promise<void>, success:string)=>{if(busyRef.current)return;busyRef.current=true;setBusy(true);setError('');setNotice('');try{await f();setNotice(success)}catch(e){setError(e instanceof Error?e.message:'Operation failed. Please try again.')}finally{busyRef.current=false;setBusy(false)}};
@@ -85,6 +143,26 @@ function App() {
  const changeState=(next:RunState)=>{if(!run)return;const id=run.id, expected=run.state;void act(async()=>{await api.transition.mutate({runId:id,expected,next});await Promise.all([loadRuns(selectedId),api.events.query({runId:id}).then(items=>{setEvents(items);setMoreEvents(items.length===50)})])},'Execution moved to '+stateLabel[next].toLowerCase()+'.')};
  const loadMoreEvents=async()=>{if(eventsBusy||!runId||events.length===0)return;const selectedRun=runId;setEventsBusy(true);try{const page=await api.events.query({runId:selectedRun,before:Number(events[events.length-1].id)});if(selectedRun===runId){setEvents(old=>[...old,...page]);setMoreEvents(page.length===50)}}catch{setError('Could not load older events.')}finally{setEventsBusy(false)}};
  const sectionTitle=view==='overview'?'Operations overview':view==='workflows'?'Workflow explorer':'Execution activity';
+ if(demoMode)return <DemoApp onOperator={()=>setDemoMode(false)}/>;
+ if(!authorized)return <div style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:24}}>
+  <form style={{maxWidth:420,width:'100%',padding:32,border:'1px solid #64748b',borderRadius:16}} onSubmit={e=>{
+   e.preventDefault();if(!enteredToken.trim()||authBusy)return;
+   operatorToken=enteredToken.trim();setAuthBusy(true);setAuthError('');
+   void api.workflows.query({limit:1}).then(()=>{
+    setEnteredToken('');setAuthorized(true);
+   }).catch(()=>{
+    operatorToken='';setAuthError('Invalid operator token or API unavailable.');
+   }).finally(()=>setAuthBusy(false));
+  }}>
+   <h1>FlowState operator access</h1><button type="button" className="button" onClick={()=>setDemoMode(true)}>Back to public demo</button>
+   <p>This workspace requires the server-side operator token. Never enter a token on an untrusted site.</p>
+   <label htmlFor="accessToken">Operator token</label>
+   <input id="accessToken" type="password" autoComplete="off" required value={enteredToken}
+    onChange={e=>setEnteredToken(e.target.value)} style={{display:'block',width:'100%',padding:12,margin:'12px 0'}}/>
+   {authError&&<p role="alert" style={{color:'#b91c1c'}}>{authError}</p>}
+   <button className="button buttonPrimary" disabled={authBusy} type="submit">{authBusy?'Verifying…':'Unlock workspace'}</button>
+  </form>
+ </div>;
  return <div className="app">
  <aside className="sidebar">
   <a href="/" className="brand"><span className="brandmark"><Icon name="layers" size={21}/></span><span>flowstate<span className="branddot">.</span><small>WORKFLOW PLATFORM</small></span></a>
