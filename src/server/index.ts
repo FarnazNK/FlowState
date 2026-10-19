@@ -20,7 +20,7 @@ createServer((req,res)=>{
 
  // Optional privileged event stream: disabled when FLOWSTATE_STREAM_TOKEN is unset.
  if(path.startsWith('/api/runs/')&&path.endsWith('/events/stream')){
-  const token=process.env.FLOWSTATE_STREAM_TOKEN;
+  const token=process.env.FLOWSTATE_API_TOKEN;
   const bearer=req.headers.authorization;
   const provided=bearer?.startsWith('Bearer ')?bearer.slice(7):'';
   const a=Buffer.from(provided),b=Buffer.from(token??'');
@@ -56,7 +56,7 @@ createServer((req,res)=>{
   }).catch(()=>{res.writeHead(503);res.end()});
   return;
  }
- if(path.startsWith('/trpc/')){void nodeHTTPRequestHandler({req,res,router:appRouter,path:path.slice(6),createContext:()=>({})});return}
+ if(path.startsWith('/trpc/')){void nodeHTTPRequestHandler({req,res,router:appRouter,path:path.slice(6),createContext:()=>({authorization:req.headers.authorization})});return}
  void (async()=>{
   const pathname=path==='/'?'/index.html':path==='/docs'?'/docs.html':path;
   const file=resolve(dist,'.'+decodeURIComponent(pathname));
