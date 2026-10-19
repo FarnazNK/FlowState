@@ -23,7 +23,7 @@ export const service = {
   return item;
  }),
  runs:(id:string)=>Effect.flatMap(Repository,r=>storage(()=>r.runs(id))),
- events:(id:string)=>Effect.flatMap(Repository,r=>storage(()=>r.events(id))),
+ events:(id:string,before?:number)=>Effect.flatMap(Repository,r=>storage(()=>r.events(id,before))),
  start:(id:string)=>Effect.gen(function*(){
   const r=yield* Repository;
   const item=yield* storage(()=>r.createRun(id));
