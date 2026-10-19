@@ -5,7 +5,7 @@
 
 **Create workflows, run them, inspect every state change, and review AI-extracted document fields in one workspace.**
 
-[Frontend — Live demo](https://flowstate-steel-psi.vercel.app) · [Backend — Live API health](https://flowstate-steel-psi.vercel.app/api/healthz)
+[Frontend — Live demo](https://flowstate-steel-psi.vercel.app) · [Backend — Live API health](https://flowstate-steel-psi.vercel.app/api/healthz) · [API documentation](docs/API.md)
 
 ## Features
 
