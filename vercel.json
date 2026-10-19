@@ -5,6 +5,10 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/docs",
+      "destination": "/docs.html"
+    },
+    {
       "source": "/trpc/:procedure",
       "destination": "/api/trpc?procedure=:procedure"
     },
