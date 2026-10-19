@@ -3,3 +3,6 @@
 
 /* Document intake workspace */
 .intakeForm{background:#1b2130;border:1px solid #3b4359;border-radius:11px;padding:18px;margin-top:20px;display:grid;gap:11px}.intakeTitle{display:flex;align-items:center;gap:9px;color:#dcd6ff;font-weight:800;font-size:13px}.intakeForm p{color:#9ca6bb;font-size:11px;line-height:1.65;margin:0}.intakeForm label{font-size:10px;letter-spacing:1.2px;color:#a4a9c0;font-weight:800}.intakeForm textarea{display:block;width:100%;resize:vertical;min-height:105px;max-height:350px;border-radius:9px;background:#101523;color:#eff0ff;border:1px solid #47516a;padding:13px;line-height:1.6;outline-color:#ae9bff;font:inherit;font-size:12px}.intakeForm button{justify-self:start}.intakeForm small{color:#737f9b;font-size:10px}.event code{white-space:pre-wrap;line-height:1.55}
+
+/* Workflow filter controls */
+.filterBar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 23px 16px}.filterBar label{font-size:10px;letter-spacing:1px;font-weight:800;color:#8693af}.filterBar select{min-width:145px;max-width:70%;background:#171d2d;color:#e7e6f6;border:1px solid #353d51;border-radius:8px;padding:9px 28px 9px 11px;font:inherit;font-size:11px}.filterBar select:focus-visible{outline:2px solid #ad9cff;outline-offset:2px}
