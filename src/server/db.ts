@@ -17,7 +17,7 @@ export const repo = {
   const client = await pool.connect();
   try {
    await client.query('BEGIN');
-   const item = (await client.query<Run>("INSERT INTO runs(id,workflow_id) SELECT $1,id FROM workflows WHERE id=$2 AND status='active' RETURNING *",[randomUUID(), workflowId])).rows[0];
+   const item = (await client.query<Run>("INSERT INTO runs(id,workflow_id) SELECT $1,id FROM workflows WHERE id=$2 AND status='active' RETURNING id,workflow_id,state,created_at,updated_at",[randomUUID(), workflowId])).rows[0];
    if(item) await client.query('INSERT INTO run_events(run_id,event_type) VALUES($1,$2)',[item.id,'run.created']);
    await client.query('COMMIT'); return item;
   } catch(error){await client.query('ROLLBACK');throw error} finally{client.release()}
@@ -26,7 +26,7 @@ export const repo = {
   const client=await pool.connect();
   try{
    await client.query('BEGIN');
-   const item=(await client.query<Run>('UPDATE runs SET state=$1,updated_at=now() WHERE id=$2 AND state=$3 RETURNING *',[next,id,expected])).rows[0];
+   const item=(await client.query<Run>('UPDATE runs SET state=$1,updated_at=now() WHERE id=$2 AND state=$3 RETURNING id,workflow_id,state,created_at,updated_at',[next,id,expected])).rows[0];
    if(item)await client.query('INSERT INTO run_events(run_id,event_type,payload) VALUES($1,$2,$3)',[id,'run.transition',JSON.stringify({from:expected,to:next})]);
    await client.query('COMMIT');return item;
   }catch(error){await client.query('ROLLBACK');throw error}finally{client.release()}
@@ -36,7 +36,7 @@ export const repo = {
   try {
    await client.query('BEGIN');
    const run = (await client.query<Run>(
-    "UPDATE runs SET state='approval', updated_at=now() WHERE id=$1 AND state='running' RETURNING *",
+    "UPDATE runs SET state='approval', updated_at=now() WHERE id=$1 AND state='running' RETURNING id,workflow_id,state,created_at,updated_at",
     [runId]
    )).rows[0];
    if (run) await client.query(
