@@ -23,7 +23,7 @@ export const appRouter=t.router({
  activateWorkflow:t.procedure.input(z.object({id})).mutation(({input})=>execute(service.activate(input.id))),
  runs:t.procedure.input(z.object({workflowId:id})).query(({input})=>execute(service.runs(input.workflowId))),
  startRun:t.procedure.input(z.object({workflowId:id})).mutation(({input})=>execute(service.start(input.workflowId))),
- events:t.procedure.input(z.object({runId:id})).query(({input})=>execute(service.events(input.runId))),
+ events:t.procedure.input(z.object({runId:id,before:z.number().int().positive().optional()})).query(({input})=>execute(service.events(input.runId,input.before))),
  intake:t.procedure.input(z.object({runId:id,text:z.string().min(40).max(12000)})).mutation(({input})=>execute(service.intake(input.runId,input.text))),
  transition:t.procedure.input(z.object({runId:id,expected:runState,next:runState})).mutation(({input})=>execute(service.transition(input.runId,input.expected,input.next)))
 });
