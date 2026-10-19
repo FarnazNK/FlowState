@@ -16,7 +16,7 @@ createServer((req,res)=>{
  }
  if(path.startsWith('/trpc/')){void nodeHTTPRequestHandler({req,res,router:appRouter,path:path.slice(6),createContext:()=>({})});return}
  void (async()=>{
-  const pathname=path==='/'?'/index.html':path;
+  const pathname=path==='/'?'/index.html':path==='/docs'?'/docs.html':path;
   const file=resolve(dist,'.'+decodeURIComponent(pathname));
   if(file!==dist&&!file.startsWith(dist+sep)){res.writeHead(403);res.end();return}
   try{const cached=staticCache.get(file);if(!cached&&!(await stat(file)).isFile())throw Error();const type=mime[extname(file)]??'application/octet-stream';const contents=cached?.body??await readFile(file);if(!cached&&file.includes(sep+'assets'+sep))staticCache.set(file,{body:contents,type});res.writeHead(200,{'content-type':type,'cache-control':file.includes(sep+'assets'+sep)?'public,max-age=31536000,immutable':'no-cache'});res.end(contents)}
