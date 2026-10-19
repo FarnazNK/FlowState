@@ -6,7 +6,7 @@ Uses PostgreSQL (already part of the project) and a standalone Node worker.
 ## Start locally
 1. Start PostgreSQL with `docker compose up -d db`.
 2. Apply `sql/schema.sql` for a fresh DB, then `sql/002_durable_jobs.sql`.
-3. Run `npm run dev` and, in another terminal, `npm run worker`.
+3. Set `FLOWSTATE_API_TOKEN` to a randomly generated 32-byte secret (e.g. `openssl rand -hex 32`) in your server environment. Run `npm run dev` and, in another terminal, `npm run worker`. Enter the operator token in the dashboard access screen.
 4. Create/activate a workflow and start a run. The worker advances pending -> running, recording an event transactionally.
 
 ## Guarantees
@@ -16,7 +16,7 @@ updates. The worker is idempotent for pending -> running. Jobs are **at least on
 exactly once for arbitrary external APIs. Never introduce side effects without idempotency keys.
 
 ## Security boundaries
-- Do not expose a public production instance: **existing tRPC APIs are unauthenticated**.
+- tRPC is protected with a mandatory shared operator token on the Node and Vercel handlers. This is **single-operator access**, not user accounts, tenant-scoped authorization or production IAM.
 - Never submit sensitive documents to a public demo.
 - Never store API keys in the client or job payloads; use server-side environment variables.
 - Do not expose Postgres or the worker to the public internet.
@@ -30,30 +30,32 @@ The optional OpenAI intake endpoint remains synchronous and requires a provider 
 
 ## Operator-only SSE (standalone Node server)
 
-Set a long random `FLOWSTATE_STREAM_TOKEN` environment variable on the **server only**.
+Set a long random `FLOWSTATE_API_TOKEN` environment variable on the **server only**.
 Do not commit it or place it in frontend bundles. The endpoint is disabled if unset.
 
 Example (use your own random secret):
 
 ```bash
-export FLOWSTATE_STREAM_TOKEN="$(openssl rand -hex 32)"
+export FLOWSTATE_API_TOKEN="$(openssl rand -hex 32)"
 npm run start
-curl -N -H "Authorization: Bearer $FLOWSTATE_STREAM_TOKEN" \
+curl -N -H "Authorization: Bearer $FLOWSTATE_API_TOKEN" \
   "http://localhost:3001/api/runs/YOUR-RUN-UUID/events/stream?after=0"
 ```
 
 Only event metadata is streamed (not extracted document bodies). Maximum 20 simultaneous
 streams per Node process. Supports `Last-Event-ID` or `after` cursor for replay,
-and sends a heartbeat when idle. Never transmit bearer tokens over plain HTTP on
+and sends a heartbeat when idle. The React dashboard now uses an authenticated streaming fetch and refreshes the selected run on events when using the standalone Node server. Never transmit bearer tokens over plain HTTP on
 an untrusted network; localhost is suitable for development. This operator token is
-**not user authentication or per-workflow authorization** and must not be copied into
-browser JavaScript. The dashboard is not yet connected to SSE.
+**not user authentication or per-workflow authorization** and must not be baked into
+frontend builds. The dashboard requests it at runtime and keeps it only in memory for the tab session. Treat it as a privileged operator secret.
 
 ## Limitations for production security
 
-The existing public Vercel tRPC endpoint does not implement authentication or
-tenant-level authorization. Existing creation, transitions and intake must be protected
-before processing user/company documents. Add account identities, access control
+The tRPC endpoints require the shared operator token but still lack individual
+user identities and tenant-level authorization. Never use this demo with confidential documents. Add account identities, access control
 on each workflow/run, origin/CSRF protections, request/body quotas, abuse controls,
 and credential rotation. The preview branch should remain unmerged until a
 security review is complete.
+
+## Hosting caveats
+The Vercel frontend/API does not implement the Node server's SSE route or run a background worker. For both durable execution and browser streaming, use the standalone Node server and worker locally. All features work without hosting charges on your own machine, but your computer must remain on. Running OpenAI intake is optional and can incur provider charges.
