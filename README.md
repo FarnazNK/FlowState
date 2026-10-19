@@ -95,14 +95,26 @@ Procedures are served at `/trpc/<name>`.
 
 | Procedure | Input | Notes |
 | --- | --- | --- |
-| `workflows` | — | Latest 100 |
+| `workflows` | — | Latest 100; ordered by creation time and ID |
 | `createWorkflow` | `{ name }` | Created as `draft` |
 | `activateWorkflow` | `{ id }` | |
-| `runs` | `{ workflowId }` | Latest 100 |
+| `runs` | `{ workflowId }` | Latest 100 for one workflow |
 | `startRun` | `{ workflowId }` | Active workflows only |
-| `events` | `{ runId }` | Run timeline |
+| `events` | `{ runId, before? }` | Newest 50 events; use an event ID cursor to load older history |
 | `transition` | `{ runId, expected, next }` | `CONFLICT` if disallowed or stale |
 | `intake` | `{ runId, text }` | 40–12,000 chars; run must be `running` |
+
+## Performance and scalability
+
+FlowState keeps UI work and database reads bounded as execution histories grow:
+
+- **Event-history pagination:** `events({ runId, before? })` fetches up to 50 events in descending event ID order. The dashboard offers **Load older events** to request the next page, rather than loading an entire audit history at once.
+- **Fewer network round trips:** successful create and activate actions update local workflow state; run transitions refresh only the affected runs and timeline, concurrently. Manual refresh requests independent datasets in parallel.
+- **Less rendering work:** dashboard counts use memoized derived values, dates share one `Intl.DateTimeFormat` instance, and event payload previews are truncated to 500 characters.
+- **Targeted SQL:** list and event queries project explicit columns rather than `SELECT *`. Composite indexes support workflow ordering, runs by workflow and creation time, and audit events by run and ID.
+- **Caching:** the standalone Node server caches built assets and sets immutable cache headers for fingerprinted assets. The Vercel health handler briefly caches database readiness results to reduce repeated probes.
+
+These are implementation changes, **not benchmarked speedup claims**. Workflow and run listings still return at most 100 records; pagination for those lists remains future work.
 
 ## Run locally
 
@@ -112,7 +124,7 @@ Requires Node.js 20+ and Docker.
 npm install
 docker compose up -d db      # Postgres with sql/schema.sql applied
 cp .env.example .env
-npm run dev                  # http://localhost:5173
+npm run dev
 ```
 
 | Variable | Required | Default |
@@ -129,11 +141,11 @@ Keep `OPENAI_API_KEY` server-side only. Without it, everything except intake sti
 ```bash
 npm run build
 npm test
-docker compose up --build    # http://localhost:3001
+docker compose up --build
 ```
 
 CI runs the build, tests, and Docker build on every push and PR. On Vercel, set the env vars and apply `sql/schema.sql` to the database once.
 
 ## Roadmap
 
-Authentication and approval policies, pausing workflows, worker queues, retries, rate limits, migrations, metrics, and end-to-end tests.
+Authentication and approval policies, workflow/run list pagination, pausing workflows, worker queues, retries, rate limits, migrations, metrics, performance benchmarks, and end-to-end tests.
