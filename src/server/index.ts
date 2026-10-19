@@ -10,6 +10,16 @@ const port=Number(process.env.PORT ?? 3001);
 const dist=resolve(process.cwd(),'dist');
 let activeStreams=0;
 const maxStreams=20;
+const requestWindows=new Map<string,{count:number;reset:number}>();
+const apiLimit=120;
+function allowRequest(address:string):boolean{
+ const now=Date.now();
+ if(requestWindows.size>2000)for(const [key,entry] of requestWindows)if(entry.reset<now)requestWindows.delete(key);
+ const previous=requestWindows.get(address);
+ if(!previous||previous.reset<now){requestWindows.set(address,{count:1,reset:now+60000});return true}
+ previous.count++;
+ return previous.count<=apiLimit;
+}
 const staticCache = new Map<string, {body:Buffer; type:string}>();
 const mime:Record<string,string>={'.html':'text/html; charset=utf-8','.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml'};
 createServer((req,res)=>{
@@ -24,8 +34,9 @@ createServer((req,res)=>{
   const bearer=req.headers.authorization;
   const provided=bearer?.startsWith('Bearer ')?bearer.slice(7):'';
   const a=Buffer.from(provided),b=Buffer.from(token??'');
-  if(!token){res.writeHead(503,{'content-type':'application/json','cache-control':'no-store'});res.end('{"error":"stream disabled"}');return}
+  if(!token||Buffer.byteLength(token)<32){res.writeHead(503,{'content-type':'application/json','cache-control':'no-store'});res.end('{"error":"stream disabled"}');return}
   if(a.length!==b.length||!timingSafeEqual(a,b)){res.writeHead(401,{'www-authenticate':'Bearer','cache-control':'no-store'});res.end();return}
+  if(!allowRequest(req.socket.remoteAddress??'unknown')){res.writeHead(429,{'retry-after':'60'});res.end();return}
   const match=/^\/api\/runs\/([0-9a-fA-F-]{36})\/events\/stream$/.exec(path);
   if(!match){res.writeHead(404);res.end();return}
   if(activeStreams>=maxStreams){res.writeHead(429,{'retry-after':'10','cache-control':'no-store'});res.end();return}
@@ -56,6 +67,7 @@ createServer((req,res)=>{
   }).catch(()=>{res.writeHead(503);res.end()});
   return;
  }
+ if(path.startsWith('/trpc/')&&!allowRequest(req.socket.remoteAddress??'unknown')){res.writeHead(429,{'retry-after':'60','cache-control':'no-store'});res.end();return}
  if(path.startsWith('/trpc/')){void nodeHTTPRequestHandler({req,res,router:appRouter,path:path.slice(6),createContext:()=>({authorization:req.headers.authorization})});return}
  void (async()=>{
   const pathname=path==='/'?'/index.html':path==='/docs'?'/docs.html':path;
