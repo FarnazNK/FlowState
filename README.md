@@ -16,24 +16,80 @@
 
 **Current scope:** The workflow state machine and audit events are operational features. AI extraction requires `OPENAI_API_KEY`; approvals are manual state changes rather than authenticated sign-off. Use sample data, not sensitive documents.
 
+## Technology stack
+
+### Frontend
+
+![React](https://img.shields.io/badge/React-19-20232A?logo=react&logoColor=61DAFB)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)
+![tRPC client](https://img.shields.io/badge/tRPC-Client-2596BE)
+
+### Backend & database
+
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![tRPC API](https://img.shields.io/badge/tRPC-API-2596BE)
+![Effect TS](https://img.shields.io/badge/Effect-TS-6E4AFF)
+![Zod](https://img.shields.io/badge/Zod-Validation-3E67B1)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+![Vercel](https://img.shields.io/badge/Vercel-Functions-000000?logo=vercel)
+
+### AI, testing & delivery
+
+![OpenAI](https://img.shields.io/badge/OpenAI-Optional-412991?logo=openai&logoColor=white)
+![Vitest](https://img.shields.io/badge/Vitest-Tests-6E9F18?logo=vitest)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI-2088FF?logo=github-actions&logoColor=white)
+[![FlowState CI](https://github.com/FarnazNK/FlowState/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/FarnazNK/FlowState/actions/workflows/ci.yml)
+
 ## Architecture
 
-```text
-React/Vite dashboard
-   |
-   v
-Type-safe tRPC API + Zod schemas (Vercel serverless)
-   |
-   v
-Effect Context / Layer services
-   |                         \
-   v                          v
-PostgreSQL repository       LLM intake provider (optional)
-   |                          |
-   +---- atomic run events <--+-- schema-validated extraction
+```mermaid
+flowchart LR
+  UI["React / Vite Dashboard"] --> CLIENT["tRPC Client"]
+  CLIENT --> API["Vercel API / Zod"]
+  API --> SERVICE["Effect Services and Layers"]
+  SERVICE --> DB[("PostgreSQL")]
+  SERVICE --> MODEL["Optional AI Intake"]
+  MODEL --> SERVICE
 ```
 
-The [repository](src/server/db.ts) uses parameterized queries, transactions, and compare-and-swap state updates. The [service](src/server/service.ts) wires Effect services using `Context.Tag` and `Layer`, with typed failures. The [intake module](src/server/intake.ts) validates the model's JSON using Zod before storing it. The [frontend](src/client/main.tsx) displays workflows, runs, and event details with explicit loading and error states.
+### Workflow state machine
+
+```mermaid
+stateDiagram-v2
+  [*] --> pending
+  pending --> running
+  pending --> failed
+  running --> approval
+  running --> completed
+  running --> failed
+  approval --> running
+  approval --> completed
+  approval --> failed
+  completed --> [*]
+  failed --> [*]
+```
+
+### AI intake flow
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant UI as React Dashboard
+  participant API as tRPC API
+  participant S as Effect Service
+  participant L as LLM
+  participant DB as PostgreSQL
+  U->>UI: Submit synthetic document
+  UI->>API: Typed intake request
+  API->>S: Validate input
+  S->>L: Extract fields
+  L-->>S: Structured JSON
+  Note over S: Zod validates model output
+  S->>DB: Commit extraction event and approval state
+  S-->>UI: Updated run and extracted fields
+```
 
 ## Run locally
 
