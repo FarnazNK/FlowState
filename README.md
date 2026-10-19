@@ -116,6 +116,19 @@ FlowState keeps UI work and database reads bounded as execution histories grow:
 
 These are implementation changes, **not benchmarked speedup claims**. Workflow and run listings still return at most 100 records; pagination for those lists remains future work.
 
+## Performance and data access
+
+FlowState limits work per request and avoids unnecessary UI refetching:
+
+- **Cursor-based audit history:** `events` returns at most 50 records, newest first. The dashboard loads older records on demand with the exclusive `before` cursor; event history is not pulled into the browser all at once.
+- **Indexed queries:** `run_events(run_id, id)`, `workflows(created_at DESC, id DESC)`, and `runs(workflow_id, created_at DESC, id DESC)` support the primary history and list access patterns. SQL schema updates are in [sql/schema.sql](sql/schema.sql).
+- **Lean SQL projections:** repository list/detail queries select explicit columns rather than `SELECT *`.
+- **Less network churn:** after mutations, the UI updates the relevant state or refreshes only affected data. Independent run/event requests are fetched in parallel where appropriate.
+- **Lower render overhead:** derived dashboard counts are memoized, the date formatter is reused, and individual event payload previews are capped at 500 characters.
+- **Lighter health and asset serving:** the Vercel health handler caches the database probe result for five seconds within a warm function instance. The standalone Node server uses long-lived caching for fingerprinted static assets and avoids repeated disk reads after the first load.
+
+**Scaling boundary:** workflow and run lists are still capped at 100 items, not fully paginated. The event cursor uses the sequence ID rather than timestamps, keeping history order stable. No measured latency or throughput improvement is claimed.
+
 ## Run locally
 
 Requires Node.js 20+ and Docker.
