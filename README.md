@@ -46,7 +46,6 @@ cp .env.example .env
 npm run dev
 ```
 
-Open http://localhost:5173. The API is served on http://localhost:3001.
 
 To enable real document extraction, add `OPENAI_API_KEY` to your local `.env`, or to Vercel as a **server-only** secret. `OPENAI_MODEL` is optional; its default is `gpt-4o-mini`. Without a key, workflow operations still work, but AI extraction returns a clear configuration error.
 
