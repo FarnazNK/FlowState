@@ -48,6 +48,8 @@ const Icon = ({ name, size=20 }: { name: string; size?: number }) => {
 function App() {
  const [authorized,setAuthorized]=useState(false);
  const [enteredToken,setEnteredToken]=useState('');
+ const [authError,setAuthError]=useState('');
+ const [authBusy,setAuthBusy]=useState(false);
  const [workflows, setWorkflows] = useState<Workflow[]>([]);
  const [workflowCursor,setWorkflowCursor]=useState<WorkflowPage['nextCursor']>(null);
  const [runCursor,setRunCursor]=useState<RunPage['nextCursor']>(null);
@@ -73,33 +75,48 @@ function App() {
  useEffect(()=>{
   if(!authorized||!runId||!selectedId)return;
   const controller=new AbortController();
+  let cursor=0;
+  const refresh=async()=>{
+   await Promise.all([
+    api.runs.query({workflowId:selectedId,limit:25}).then(page=>{if(!controller.signal.aborted){setRuns(page.items);setRunCursor(page.nextCursor)}}),
+    api.events.query({runId}).then(data=>{if(!controller.signal.aborted){setEvents(data);setMoreEvents(data.length===50)}})
+   ]);
+  };
+  const wait=(ms:number)=>new Promise<void>(resolve=>{
+   const timer=setTimeout(()=>{controller.signal.removeEventListener('abort',onAbort);resolve()},ms);
+   const onAbort=()=>{clearTimeout(timer);resolve()};
+   controller.signal.addEventListener('abort',onAbort,{once:true});
+  });
   const stream=async()=>{
-   try{
-    const response=await fetch('/api/runs/'+encodeURIComponent(runId)+'/events/stream',{
-     headers:{Authorization:'Bearer '+operatorToken,Accept:'text/event-stream'},
-     signal:controller.signal
-    });
-    if(!response.ok||!response.body)return;
-    const reader=response.body.getReader(),decoder=new TextDecoder();
-    let buffer='';
-    while(!controller.signal.aborted){
-     const result=await reader.read();
-     if(result.done)break;
-     buffer+=decoder.decode(result.value,{stream:true});
-     let boundary=buffer.indexOf('\\n\\n');
-     while(boundary>=0){
-      const frame=buffer.slice(0,boundary);
-      buffer=buffer.slice(boundary+2);
-      if(frame.includes('event: workflow.updated')){
-       void Promise.all([
-        api.runs.query({workflowId:selectedId,limit:25}).then(page=>{setRuns(page.items);setRunCursor(page.nextCursor)}),
-        api.events.query({runId}).then(data=>{setEvents(data);setMoreEvents(data.length===50)})
-       ]).catch(()=>{});
+   while(!controller.signal.aborted){
+    try{
+     const response=await fetch('/api/runs/'+encodeURIComponent(runId)+'/events/stream?after='+cursor,{
+      headers:{Authorization:'Bearer '+operatorToken,Accept:'text/event-stream'},
+      signal:controller.signal,
+      cache:'no-store'
+     });
+     if(response.status===401||response.status===403)break;
+     if(!response.ok||!response.body){await wait(3000);continue}
+     const reader=response.body.getReader(),decoder=new TextDecoder();
+     let buffer='';
+     while(!controller.signal.aborted){
+      const result=await reader.read();
+      if(result.done)break;
+      buffer+=decoder.decode(result.value,{stream:true});
+      if(buffer.length>65536){buffer='';continue}
+      let boundary=buffer.indexOf('\n\n');
+      while(boundary>=0){
+       const frame=buffer.slice(0,boundary);
+       buffer=buffer.slice(boundary+2);
+       const id=/^id: (\d+)$/m.exec(frame);
+       if(id)cursor=Math.max(cursor,Number(id[1]));
+       if(frame.includes('event: workflow.updated'))void refresh().catch(()=>{});
+       boundary=buffer.indexOf('\n\n');
       }
-      boundary=buffer.indexOf('\\n\\n');
      }
-    }
-   }catch{/* SSE is optional; manual refresh remains available. */}
+    }catch{ /* Reconnect after transient errors. */ }
+    await wait(3000);
+   }
   };
   void stream();
   return()=>controller.abort();
@@ -126,15 +143,21 @@ function App() {
  const sectionTitle=view==='overview'?'Operations overview':view==='workflows'?'Workflow explorer':'Execution activity';
  if(!authorized)return <div style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:24}}>
   <form style={{maxWidth:420,width:'100%',padding:32,border:'1px solid #64748b',borderRadius:16}} onSubmit={e=>{
-   e.preventDefault();if(!enteredToken.trim())return;
-   operatorToken=enteredToken.trim();setEnteredToken('');setAuthorized(true);
+   e.preventDefault();if(!enteredToken.trim()||authBusy)return;
+   operatorToken=enteredToken.trim();setAuthBusy(true);setAuthError('');
+   void api.workflows.query({limit:1}).then(()=>{
+    setEnteredToken('');setAuthorized(true);
+   }).catch(()=>{
+    operatorToken='';setAuthError('Invalid operator token or API unavailable.');
+   }).finally(()=>setAuthBusy(false));
   }}>
    <h1>FlowState operator access</h1>
    <p>This workspace requires the server-side operator token. Never enter a token on an untrusted site.</p>
    <label htmlFor="accessToken">Operator token</label>
    <input id="accessToken" type="password" autoComplete="off" required value={enteredToken}
     onChange={e=>setEnteredToken(e.target.value)} style={{display:'block',width:'100%',padding:12,margin:'12px 0'}}/>
-   <button className="button buttonPrimary" type="submit">Unlock workspace</button>
+   {authError&&<p role="alert" style={{color:'#b91c1c'}}>{authError}</p>}
+   <button className="button buttonPrimary" disabled={authBusy} type="submit">{authBusy?'Verifying…':'Unlock workspace'}</button>
   </form>
  </div>;
  return <div className="app">
