@@ -2,7 +2,7 @@
 
 **A workspace to create workflows, run them, review document intake, and track every decision.**
 
-[**Live dashboard ↗**](https://flowstate-steel-psi.vercel.app) · [CI status](https://github.com/FarnazNK/FlowState/actions/workflows/ci.yml) · [API health](https://flowstate-steel-psi.vercel.app/api/healthz)
+[**Frontend — Live demo ↗**](https://flowstate-steel-psi.vercel.app) · [**Backend — Live API health ↗**](https://flowstate-steel-psi.vercel.app/api/healthz) · [CI status](https://github.com/FarnazNK/FlowState/actions/workflows/ci.yml)
 
 [![Quality Gate](https://github.com/FarnazNK/FlowState/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/FarnazNK/FlowState/actions/workflows/ci.yml)
 ![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)
