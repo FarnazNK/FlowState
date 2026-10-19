@@ -2,10 +2,12 @@ import { initTRPC, TRPCError } from '@trpc/server';
 import { Effect } from 'effect';
 import { z } from 'zod';
 import { service, AppLayer } from './service.js';
+import { Repository } from './db.js';
+import { IntakeModel } from './intake.js';
 const t=initTRPC.create();
 const runState=z.enum(['pending','running','approval','completed','failed']);
 const id=z.string().uuid();
-async function execute<T,E extends {_tag:string}>(program:Effect.Effect<T,E,any>):Promise<T>{
+async function execute<T,E extends {_tag:string}>(program:Effect.Effect<T,E,Repository | IntakeModel>):Promise<T>{
  const result=await Effect.runPromise(Effect.either(Effect.provide(program,AppLayer)));
  if(result._tag==='Right')return result.right;
  if(result.left._tag==='NotFound')throw new TRPCError({code:'NOT_FOUND',message:'Resource not found'});
